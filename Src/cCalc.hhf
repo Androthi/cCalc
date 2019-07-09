@@ -1,0 +1,101 @@
+procedure UpdateControls;	@external;
+
+const  // dialog IDs
+
+	// dialog
+ID_CALC                 := 1000;
+ED_INPUT                := 1003;
+ED_OP                   := 1004;
+BT_AND                  := 1001;
+BT_OR                   := 1013;
+BT_XOR                  := 1014;
+BT_NOT                  := 1015;
+BT_NEG                  := 1016;
+BT_SHL                  := 1017;
+BT_ROL                  := 1018;
+BT_SHR                  := 1019;
+BT_ROR                  := 1020;
+BT_SET                  := 1051;
+BT_CLEAR                := 1021;
+BT_ADD                  := 1023;
+BT_SUB                  := 1024;
+BT_MUL                  := 1025;
+BT_DIV                  := 1026;
+RB_Z                    := 1029;
+RB_C                    := 1030;
+RB_S                    := 1031;
+RB_O                    := 1032;
+ED_SIGNED               := 1002;
+BT_TOOP                 := 1006;
+RB_ERROR                := 1005;
+BT_TEST                 := 1010;
+BT_CMP                  := 1011;
+BT_SAR                  := 1007;
+BT_ADC			:= 1008;
+BT_SBB			:= 1009;
+BT_XCHG			:= 1012;
+BT_IMUL			:= 1022;
+BT_IDIV			:= 1027;
+BT_MOD			:= 1028;
+BT_IMOD			:= 1033;
+
+	
+	ID_ACCEL			:= 1;
+	ID_JACKAL			:= 100;
+
+	// menu
+	ID_MENU				:= 3000;
+		IDM_QUIT			:= 3001;
+		IDM_INPUT_HEX		:= 3002;
+		IDM_INPUT_DEC		:= 3003;
+		
+	ID_NEXTCONTROL		:= 5000; 	// TAB
+
+	// register flags  2000 -> 2031  correspond to reg 0 .. 31
+endconst;
+
+readonly
+	// the target addresses are global labels contained in the
+	// Control procedure.
+	command_tbl:	dword;	@nostorage;
+		dword	IDM_QUIT,		&menu_quit;
+		dword	IDM_INPUT_HEX,	&menu_input_hex;
+		dword	IDM_INPUT_DEC,	&menu_input_dec;
+		dword	BT_CLEAR,		&btn_clearflags;
+		dword	BT_SET,			&btn_setflags;
+		dword	BT_NOT,			&btn_not;
+		dword	BT_NEG,			&btn_neg;
+		dword	BT_SHL,			&btn_shl;
+		dword	BT_SAR,			&btn_sar;
+		dword	BT_SHR,			&btn_shr;
+		dword	BT_ROR,			&btn_ror;
+		dword	BT_ROL,			&btn_rol;
+		dword	BT_TOOP,		&btn_toop;
+		dword	BT_AND,			&btn_and;
+		dword	BT_OR,			&btn_or;
+		dword	BT_XOR,			&btn_xor;
+		dword	BT_ADD,			&btn_add;
+		dword	BT_SUB,			&btn_sub;
+		dword	BT_MUL,			&btn_mul;
+		dword	BT_DIV,			&btn_div;
+		dword	BT_TEST,		&btn_test;
+		dword	BT_CMP,			&btn_cmp;
+		dword BT_SBB,		&btn_sbb;
+		dword BT_ADC,		&btn_adc;
+		dword	ID_NEXTCONTROL,	&key_tab;
+		dword BT_XCHG,		&btn_xchg;
+		dword BT_IMUL,		&btn_imul;
+		dword BT_IDIV,		&btn_idiv;
+		dword BT_MOD,		&btn_mod;
+		dword BT_IMOD,		&btn_imod;
+		dword	0,				NULL;			 // end of commandtable;
+		
+
+
+val
+	// for procedures called from WndProc, using HLA calling convention
+	hwin	:text	:="[ebp+8]";
+	umsg	:text	:="[ebp+12]";
+	wparam	:text	:="[ebp+16]";
+	lparam	:text	:="[ebp+20]";
+

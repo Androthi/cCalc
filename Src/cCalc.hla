@@ -1,0 +1,848 @@
+
+program cCalc;
+	
+	#includeonce("w32\win32.hhf")
+	//#includeonce("hide\dbgwin.hhf")
+	#includeonce("macros\macros.hhf")
+	#includeonce("memory.hhf")
+	#includeonce("strings.hhf")
+	#includeonce("excepts.hhf")
+	#includeonce("patterns.hhf")
+	#includeonce("conv.hhf")
+
+	#include ("src\cCalc.hhf")
+
+	?@nodisplay:=true;
+
+	readonly
+		title	:string := "cCalc 1.13   By: Sevag Krikorian";
+		ClassName	:str.constant ( "DLGCLASS");
+
+	
+	type
+		SUBCLASSPOINTERS	:record
+									ControlhWnd	:dword;
+									OldWndProc	:dword;
+							endrecord;
+
+
+	const
+		enum0 (
+			MODE_HEX,
+			MODE_DEC	);
+			
+		NUM_SUBCLASSES	:= 6;
+		
+	storage
+		align(4);
+		hInstance	:dword;
+		hWnd		:dword;
+		hIcon		:dword;
+		hmenu		:dword;
+		haccel		:dword;
+			
+		bitpos		:dword;
+		i32			:int32;
+		opvalue		:dword;
+			
+		wc			:w.WNDCLASSEX;
+		msg			:w.MSG;
+		subclasses	:SUBCLASSPOINTERS[NUM_SUBCLASSES];
+		
+		
+		buffer		:byte[500];		// general purpose buffers
+		buffer2		:byte[500];
+		bufstr		:string;
+		
+		error_mode		:dword;
+		input_mode		:dword;
+		current_focus	:dword;
+		
+		carryflag		:boolean;
+		overflowflag	:boolean;
+		zeroflag		:boolean;
+		signflag		:boolean;
+		thisflags		:dword;
+	
+		
+procedure setFlags; @noframe;
+begin setFlags;
+	
+	pushfd();
+	pop( thisflags );
+	
+	if(@z) then
+		mov(true,zeroflag);
+	else
+		mov (false, zeroflag);
+	endif;
+	
+	if(@o) then
+		mov(true, overflowflag);
+	else
+		mov (false, overflowflag);
+	endif;
+	
+	if(@c) then
+		mov(true,carryflag);
+	else
+		mov (false, carryflag);
+	endif;
+	
+	if(@s) then
+		mov(true,signflag);
+	else
+		mov (false, signflag);
+	endif;
+	
+	ret();
+end setFlags;
+
+
+procedure FlagsControl;		@noframe;
+// this section handles manipulation of bit-flags
+begin FlagsControl;
+
+	Flags_ToEAX::
+		PUSHFD();
+		USE(ebx,esi);
+		mov(1999,bitpos);
+		xor(ebx,ebx);
+		xor(esi,esi);
+		while(esi < 32) do
+			inc(bitpos);
+			w.IsDlgButtonChecked(hwin,bitpos);
+			_if(eax=w.BST_CHECKED)
+				bts(esi,ebx);
+			_endif;
+			inc(esi);
+		endwhile;
+		mov(ebx,eax);
+		ENDUSE;
+		POPFD();
+		ret();
+	//==============================================================================
+	Flags_ToEdit::
+		// convert the flag buttons to a numeric and display it in edit window
+		str.init(&buffer,@size(buffer));
+		mov(eax,bufstr);
+		call Flags_ToEAX;
+		_if(input_mode=MODE_DEC)
+			//convert to decimal
+			conv.u32ToStr(eax,0,' ',bufstr);
+		_else
+			// convert to hexadecimal
+			conv.h32ToStr(eax,0,' ',bufstr);
+		_endif;
+		w.SetDlgItemText(hwin,ED_INPUT,bufstr);
+		ret();
+	//==============================================================================
+	Flags_SetEAX::
+		USE(ebx);
+		mov(1999,bitpos);
+		mov(eax,ebx);
+		while(bitpos < 2032) do
+			inc(bitpos);
+			shr(1,ebx);
+			_if(@c)
+				w.CheckDlgButton(hwin,bitpos,w.BST_CHECKED);
+			_else
+				w.CheckDlgButton(hwin,bitpos,w.BST_UNCHECKED);
+			_endif;
+		endwhile;
+		ENDUSE;
+		ret();
+	//==============================================================================		
+	Flags_ClearAll::
+		mov(1999,bitpos);
+		while(bitpos < 2032) do
+			inc(bitpos);
+			w.CheckDlgButton(hwin,bitpos,w.BST_UNCHECKED);
+		endwhile;
+		ret();
+	//==============================================================================
+	Flags_SetAll::
+		mov(1999,bitpos);
+		while(bitpos < 2032) do
+			inc(bitpos);
+			w.CheckDlgButton(hwin,bitpos,w.BST_CHECKED);
+		endwhile;
+		ret();
+	//==============================================================================
+	//==============================================================================
+
+end FlagsControl;
+
+procedure ButtonControl;	@noframe;
+// heart of button control, jump table calls these labels.
+begin ButtonControl;
+	
+	menu_input_hex::
+		mov(MODE_HEX,input_mode);
+		w.CheckMenuItem(hmenu, IDM_INPUT_HEX,w.MF_BYCOMMAND | w.MF_CHECKED);
+		w.CheckMenuItem(hmenu, IDM_INPUT_DEC,w.MF_BYCOMMAND | w.MF_UNCHECKED);
+		call Flags_ToEdit;
+		or(1,eax);
+		call UpdateControls;
+		ret();
+		
+	menu_input_dec::
+		mov(MODE_DEC,input_mode);
+		w.CheckMenuItem(hmenu, IDM_INPUT_HEX,w.MF_BYCOMMAND | w.MF_UNCHECKED);
+		w.CheckMenuItem(hmenu, IDM_INPUT_DEC,w.MF_BYCOMMAND | w.MF_CHECKED);
+		call Flags_ToEdit;
+		or(1,eax);
+		call UpdateControls;
+		ret();
+	
+	menu_quit::
+		w.SendMessage(hwin,w.WM_DESTROY,0,0);
+		ret();
+
+	btn_clearflags::
+		call Flags_ClearAll;
+		call Flags_ToEdit;
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+		
+	btn_setflags::
+		call Flags_SetAll;
+		call Flags_ToEdit;
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+
+	btn_not::
+		call Flags_ToEAX;
+		not(eax);
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+		
+	btn_neg::
+		call Flags_ToEAX;
+		neg(eax);
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+		
+	btn_shl::
+		call Flags_ToEAX;
+		shl(1,eax);
+		call setFlags;
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+		
+	btn_shr::
+		call Flags_ToEAX;
+		shr(1,eax);
+		call setFlags;
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+
+	btn_sar::
+		call Flags_ToEAX;
+		sar(1, eax);
+		call setFlags;
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+
+	btn_rol::
+		call Flags_ToEAX;
+		rol(1,eax);
+		call setFlags;
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+		
+	btn_ror::
+		call Flags_ToEAX;
+		ror(1,eax);
+		call setFlags;
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+
+	btn_toop::
+		w.GetDlgItemTextA(hwin,ED_INPUT,&buffer,@size(buffer));
+		w.SetDlgItemText(hwin,ED_OP,&buffer);
+		ret();
+		
+	btn_and::
+		call Flags_ToEAX;
+		and(opvalue,eax);
+		call setFlags;
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+	
+	btn_or::
+		call Flags_ToEAX;
+		or(opvalue,eax);
+		call setFlags;
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+		
+	btn_xor::
+		call Flags_ToEAX;
+		xor(opvalue,eax);
+		call setFlags;
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+		
+	btn_add::
+		call Flags_ToEAX;
+		add(opvalue,eax);
+		call setFlags;
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+	
+	btn_adc::
+		call Flags_ToEAX;
+		push( thisflags );
+		popfd();
+		adc( opvalue, eax );
+		call setFlags;
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		xor( eax, eax );
+		call UpdateControls;
+		ret();
+		
+	btn_test::
+		call Flags_ToEAX;
+		test(opvalue,eax);
+		call setFlags;
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+		
+	btn_cmp::
+		call Flags_ToEAX;
+		cmp(eax,opvalue);
+		call setFlags;
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+		
+	btn_sub::
+		call Flags_ToEAX;
+		sub(opvalue,eax);
+		call setFlags;
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+		
+	btn_sbb::
+		call Flags_ToEAX;
+		push( thisflags );
+		popfd();
+		sbb( opvalue, eax );
+		call setFlags;
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		xor( eax, eax );
+		call UpdateControls;
+		ret();
+		
+	btn_mul::
+		call Flags_ToEAX;
+		mul(opvalue);
+		call setFlags;
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		// undefined
+		mov( false, signflag );
+		mov( false, zeroflag );
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+		
+	btn_imul::
+		call Flags_ToEAX;
+		imul(opvalue);
+		call setFlags;
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+
+		// undefined
+		mov( false, signflag );
+		mov( false, zeroflag );
+		xor( eax, eax );
+		call UpdateControls;
+		ret();
+		
+	btn_div::
+		cmp(opvalue,0);
+		_if(@e)
+			mov(true,error_mode);
+			jmp _enddiv;
+		_endif;
+		call Flags_ToEAX;
+		xor( edx, edx );
+		div(opvalue);
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		// these are undefined in div operations
+		mov(false,signflag);
+		mov(false,carryflag);
+		mov(false,zeroflag);
+		mov(false,overflowflag);
+		_enddiv:
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+		
+	btn_idiv::
+		cmp( opvalue, 0 );
+		_if( @e )
+			mov( true, error_mode );
+			jmp _endidiv;
+		_endif;
+		call Flags_ToEAX;
+		cdq();
+		idiv( opvalue );
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		
+		// these are undefined in idiv operations
+		mov(false,signflag);
+		mov(false,carryflag);
+		mov(false,zeroflag);
+		mov(false,overflowflag);
+		_endidiv:
+		xor( eax, eax );
+		call UpdateControls;
+		ret();
+		
+	btn_mod::
+		_if(@e)
+			mov(true,error_mode);
+			jmp _endmod;
+		_endif;
+		call Flags_ToEAX;
+		xor( edx, edx );
+		div(opvalue);
+		mov( edx, eax );
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		// these are undefined in div operations
+		mov(false,signflag);
+		mov(false,carryflag);
+		mov(false,zeroflag);
+		mov(false,overflowflag);
+		_endmod:
+		xor(eax,eax);
+		call UpdateControls;
+		ret();
+
+	btn_imod::
+		cmp( opvalue, 0 );
+		_if( @e )
+			mov( true, error_mode );
+			jmp _endimod;
+		_endif;
+		call Flags_ToEAX;
+		cdq();
+		idiv( opvalue );
+		mov( edx, eax );
+		call Flags_SetEAX;
+		call Flags_ToEdit;
+		
+		// these are undefined in idiv operations
+		mov(false,signflag);
+		mov(false,carryflag);
+		mov(false,zeroflag);
+		mov(false,overflowflag);
+		_endimod:
+		xor( eax, eax );
+		call UpdateControls;
+		ret();
+		
+	btn_xchg::
+		w.GetDlgItemTextA(hwin,ED_INPUT,&buffer,@size(buffer));
+		w.GetDlgItemTextA(hwin,ED_OP,&buffer2,@size(buffer2));
+		w.SetDlgItemText(hwin,ED_OP,&buffer);
+		w.SetDlgItemText(hwin,ED_INPUT,&buffer2);
+		ret();
+		
+	key_tab::
+		w.SendDlgItemMessage ( hwin, ED_INPUT, w.EM_SETSEL, 0, 0);
+		w.SendDlgItemMessage ( hwin, ED_OP, w.EM_SETSEL, 0, 0);
+		
+		w.GetDlgItem(hwin,ED_INPUT);
+		mov(eax,ebx);
+		w.GetFocus();
+		_if(eax=ebx)
+			w.GetDlgItem(hwin,ED_OP);
+		_else
+			w.GetDlgItem(hwin,ED_INPUT);
+		_endif;
+		mov(eax,current_focus);
+		w.SetFocus(eax);
+		w.SendMessage (current_focus, w.EM_SETSEL, 0, -1);
+		ret();	
+
+end ButtonControl;
+
+procedure EditControl;	@noframe;
+begin EditControl;
+
+	ValidateInput::
+		mov(false,error_mode);
+		pat.match(bufstr);
+			_if(input_mode = MODE_HEX)
+				// valid hexadecimal?
+				pat.oneOrMoreCset( { 'a'..'f', 'A'..'F','0'..'9','_'} );
+				pat.EOS();
+				try
+					conv.strToh32(bufstr,0);
+				anyexception
+					mov(true,error_mode);
+				endtry;
+			_else
+				// valid decimal?
+				pat.oneOrMoreCset( { '0'..'9' } );
+				pat.EOS();
+				try
+					conv.strTou32(bufstr,0);	// causes crash when bufstr.length = 21 
+				anyexception
+					mov(true,error_mode);
+				endtry;
+			_endif;			
+		pat.if_failure
+			str.length(bufstr);
+			_if(eax)
+				mov(true,error_mode);
+			_endif;
+		pat.endmatch;
+		ret();
+//==============================================================================
+	EditInput::
+		str.init(&buffer,@size(buffer));
+		mov(eax,bufstr);
+		mov(bufstr,esi);
+		mov((type str.strRec[esi]).MaxStrLen,eax);
+		w.GetDlgItemTextA(hwin,ED_INPUT,[esi],eax);
+		mov(eax,(type str.strRec[esi]).length);
+		call ValidateInput;
+
+		_if(error_mode = true)
+			call Flags_ClearAll;
+		_else
+			mov(eax,i32);
+			call Flags_SetEAX;
+			conv.i32ToStr(i32,0,' ',bufstr);
+			w.SetDlgItemText(hwin,ED_SIGNED,bufstr);			
+		_endif;
+		// set flags and signed window
+		or(1,eax);	
+		call UpdateControls;
+		ret();
+//==============================================================================
+	Edit_Op::
+		str.init(&buffer,@size(buffer));
+		mov(eax,bufstr);
+		mov(bufstr,esi);
+		mov((type str.strRec[esi]).MaxStrLen,eax);
+		w.GetDlgItemTextA(hwin,ED_OP,[esi],eax);
+		mov(eax,(type str.strRec[esi]).length);
+		call ValidateInput;
+		
+		_if(error_mode = true)
+			call Flags_ClearAll;
+		_else
+			mov(eax,opvalue);
+		_endif;
+		or(1,eax);
+		call UpdateControls;
+		ret();
+end EditControl;
+
+procedure UpdateControls;	@noframe;
+// update controls after button has been pressed
+begin UpdateControls;
+	// get cpu flags conditions
+	push(eax);
+	call Flags_ToEAX;
+	shl (1, eax);			// check sign flag
+	if(@c) then
+		mov(true,signflag);
+	else
+		mov (false, signflag);
+	endif;
+	
+	_if(signflag);
+		w.CheckDlgButton(hwin,RB_S,w.BST_CHECKED);
+	_else
+		w.CheckDlgButton(hwin,RB_S,w.BST_UNCHECKED);
+	_endif;
+	
+	_if(carryflag)
+		w.CheckDlgButton(hwin,RB_C,w.BST_CHECKED);
+	_else
+		w.CheckDlgButton(hwin,RB_C,w.BST_UNCHECKED);
+	_endif;
+	
+	_if(overflowflag)
+		w.CheckDlgButton(hwin,RB_O,w.BST_CHECKED);
+	_else
+		w.CheckDlgButton(hwin,RB_O,w.BST_UNCHECKED);
+	_endif;
+	
+	_if(zeroflag)
+		w.CheckDlgButton(hwin,RB_Z,w.BST_CHECKED);
+	_else
+		w.CheckDlgButton(hwin,RB_Z,w.BST_UNCHECKED);
+	_endif;
+	
+	_if(error_mode=true)
+		w.CheckDlgButton(hwin,RB_ERROR,w.BST_CHECKED);
+	_else
+		w.CheckDlgButton(hwin,RB_ERROR,w.BST_UNCHECKED);
+	_endif;
+
+	pop(eax);
+	_if(! eax);
+		// reset flags after displaying them
+		mov(false,signflag);
+		mov(false,carryflag);
+		mov(false,overflowflag);
+		mov(false,zeroflag);
+	_endif;
+
+	w.SetFocus(current_focus);
+	ret();
+end UpdateControls;
+
+
+procedure NoControlResponse  ( lParam:dword; wParam:dword; uMsg:uns32; hWin:dword );
+begin NoControlResponse;
+	
+	mov(uMsg,eax);
+	mov(hWin,edx);
+	
+	cmp(eax,w.WM_KEYFIRST);
+	jb _passmessage;
+	cmp(eax,w.WM_KEYLAST);
+	jbe _ignoremessage;
+	
+	cmp(eax,w.WM_MOUSEFIRST);
+	jb _passmessage;
+	cmp(eax,w.WM_MOUSELAST);
+	jbe _ignoremessage;
+	
+_passmessage:
+	mov(&subclasses,eax);
+	mov(NUM_SUBCLASSES,ecx);
+	
+_findptr:
+	cmp((TYPE SUBCLASSPOINTERS[EAX]).ControlhWnd,edx);
+	je _foundptr;
+	add(@size(SUBCLASSPOINTERS),eax);
+	dec(ecx);
+	jnz _findptr;
+	
+_ignoremessage:
+	mov(true,eax);
+	exit NoControlResponse;
+	
+_foundptr:
+	mov((TYPE SUBCLASSPOINTERS[EAX]).OldWndProc,ecx);
+	w.CallWindowProc(ecx,hWin,uMsg,wParam,lParam);
+end NoControlResponse;
+
+procedure WndProc ( lParam:dword; wParam:dword; uMsg:uns32; hWin:dword );
+begin WndProc;
+
+	mov(uMsg,eax);
+	cmp(eax, w.WM_COMMAND);
+	je _command;
+	cmp(eax, w.WM_DESTROY);
+	je _destroy;
+	cmp(eax, w.WM_CLOSE);
+	je _close;
+	cmp(eax,w.WM_INITDIALOG);
+	je _init;
+	cmp(eax,w.EN_SELCHANGE);
+	w.DefWindowProc(hWin,uMsg,wParam,lParam);
+	exit WndProc;
+	
+	_command:
+		mov(wParam,ecx);
+		mov(ecx,edx);
+		movzx(cx,ecx);			// clear high-order word
+		shr(16,edx);
+		cmp(edx,w.BN_CLICKED);
+		je _findcommand;
+		cmp(edx,1);	// for accelerator messages
+		je _findcommand;
+		cmp(edx,w.EN_CHANGE);
+		je _edinput;
+
+		_findcommand:
+				// see if it is a bit flag button
+				cmp(ecx,2000);
+				jb _searchtable;
+				cmp(ecx,2031);
+				ja _searchtable;
+				call Flags_ToEdit;
+				call UpdateControls;				
+				jmp _xWndProc;
+				
+		_searchtable:
+				mov(&command_tbl,edx);
+				sub(8,edx);
+		_next:	
+				add(8,edx);
+				mov([edx],eax);
+				cmp(eax,0);
+				je _xWndProc;
+				cmp(ecx,eax);
+				jne _next;
+				call([edx+4]);
+				jmp _xWndProc;
+	
+		_edinput:
+			USE( ESI, EDI, EBX);
+				if(ecx=ED_INPUT) then
+					w.GetDlgItem(hWin, ED_INPUT);
+					mov(eax,current_focus);
+					call EditInput;
+				elseif(ecx=ED_OP) then
+					w.GetDlgItem(hWin, ED_OP);
+					mov(eax, current_focus);
+					call Edit_Op;
+				endif;
+			ENDUSE;
+				jmp _xWndProc;
+	
+	_close:
+		w.SendMessage(hWin,w.WM_DESTROY,0,0);
+		jmp _xWndProc;
+	
+	_destroy:
+		w.PostQuitMessage(NULL);
+		jmp _xWndProc;
+		
+	_init:
+		w.GetDlgItem(hWin,ED_INPUT);
+		w.SetFocus(eax);
+		mov(eax,current_focus);
+		w.GetMenu(hWin);
+		mov(eax,hmenu);
+		w.CheckMenuItem(hmenu, IDM_INPUT_DEC,w.MF_BYCOMMAND | w.MF_CHECKED);
+		mov(MODE_DEC,input_mode);
+		
+		w.SetWindowText(hWin,title);
+
+		// subclass non-input windows
+			
+		mov(&subclasses,ebx);
+		mov(RB_ERROR,eax);
+		call SubClassIt;
+		
+		mov(RB_O,eax);
+		call SubClassIt;
+		
+		mov(RB_S,eax);
+		call SubClassIt;
+		
+		mov(RB_Z,eax);
+		call SubClassIt;
+
+		mov(RB_C,eax);
+		call SubClassIt;
+		
+	_xWndProc:
+		xor(eax,eax);	
+		Exit WndProc;
+		
+// local procs
+SubClassIt:
+		w.GetDlgItem(hWin,eax);
+		mov(eax,(type SUBCLASSPOINTERS[ebx]).ControlhWnd);
+		w.SetWindowLong(eax,w.GWL_WNDPROC,&NoControlResponse);
+		mov(eax,(type SUBCLASSPOINTERS[ebx]).OldWndProc);
+		add(@size(SUBCLASSPOINTERS),ebx);
+		ret();		
+end WndProc;
+
+begin cCalc;
+	
+	w.GetModuleHandle(NULL);
+	mov(eax,hInstance);
+
+	mov( @size( w.WNDCLASSEX ), wc.cbSize );
+	mov( w.CS_HREDRAW | w.CS_VREDRAW, wc.style );
+	mov( &WndProc, wc.lpfnWndProc );
+	mov( NULL, wc.cbClsExtra );
+	mov( w.DLGWINDOWEXTRA, wc.cbWndExtra );
+	mov( hInstance, wc.hInstance );
+	mov( w.COLOR_BTNFACE+1, wc.hbrBackground );
+	mov( ID_MENU, wc.lpszMenuName ); 
+	mov( &ClassName, wc.lpszClassName );
+
+	w.LoadIcon( hInstance, val ID_JACKAL);
+	mov( eax, hIcon);
+	mov( eax, wc.hIcon );
+
+	mov( eax, wc.hIconSm );
+	
+	w.LoadCursor( NULL, val w.IDC_ARROW );
+	mov( eax, wc.hCursor );
+	
+	w.RegisterClassEx( wc );
+	w.CreateDialogParam(hInstance,val ID_CALC,NULL,&WndProc,NULL);
+	mov	(eax, hWnd);
+	w.ShowWindow(hWnd, w.SW_SHOWNORMAL);
+	w.UpdateWindow(hWnd);
+	w.LoadAccelerators(hInstance,val ID_ACCEL);
+	mov(eax,haccel);
+	
+	msgloop:
+		w.GetMessage(msg,NULL,0,0);
+		cmp(eax,0);
+		jz endmsg;
+		w.TranslateAccelerator(hWnd,haccel,msg);
+		cmp(eax,0);
+		jne msgloop;
+		w.TranslateMessage(msg);
+		w.DispatchMessage(msg);
+		jmp msgloop;
+	endmsg:
+	w.ExitProcess(msg.wParam);
+
+	
+end cCalc;

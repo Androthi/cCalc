@@ -1,0 +1,307 @@
+cCalc v. 1.13
+Sevag Krikorian
+
+
+
+Licence:
+Freeware.  Use it as you will, at your own risk.
+Package it with anything, anywhere.
+
+Kudos and Curses to:
+sevag.krikorian@gmail.com
+
+Contents:
+	Updates			section 1
+	Using cCalc			section 2
+	Keyboard shortcuts	section 3
+	Bit Formulas		section 4
+	
+	
+[section 1]
+Updates:
+1.13	-renamed "Copy to Op" to "MOV -> Op"
+	-reordered some controls
+	-added XCHG, exchanges Input with Op
+	-added IDIV, IMUL
+	-added [MOD], [IMOD], these are in brackets
+	 since they are not really cpu instructions, but
+	 added for convenience, they display the remainder of DIV/IDIV
+	 instructions in EDX.
+1.11	-added adc, sbb
+1.08	-maintainence
+1.07	-maintainence
+
+[section 2]
+Use:
+
+For beginners:
+	Help one understand how bits and flags are modified
+when using cpu instructions supported in cCalc.
+
+Advanced users:
+	Useful for generating bit-masks and testing out new
+bit manipulation formulas.
+
+Supported instructions:
+SHL	(same as SAL)
+SHR
+SAR
+ROR
+ROL
+NOT
+NEG
+AND
+OR
+XOR
+ADD
+SUB
+DIV
+IDIV
+MUL
+IMUL
+TEST
+CMP	(cmp input,op)
+ADC
+SBB
+XCHG
+[ MOD ] - not really cpu instructions, displays EDX/remainder instead
+[ IMOD ] - not really cpu instructions, displays EDX/remainder instead
+
+Note: it is up to the user to know which flags are defined
+and which are not defined with each instruction.
+
+Input:
+Menu-selectable, hexadecimal or decimal
+
+Arithmatic notes:
+Input is considered the accumulator (EAX), and destination
+Op is considered the operand (for DIV, MUL),
+and source (for ADD, SUB, CMP, TEST)
+
+MUL, IMUL, DIV, IDIV, [MOD], [IMOD] - always 32-bit,
+EDX is sign-extended for IDIV and [IMOD]
+
+[section 3]
+
+Keyboard shortcuts:
+
+	Command buttons have keyboard shortcuts.
+Shortcuts are accessed by pressing ctrl-key, usually
+denoted by an underlined letter in the command name.
+For the ones that don't have underlined letters:
+
+ESC		quit program
+MOV -> Op	ctrl enter
+ROL		ctrl left
+ROR		ctrl right
+SAR		ctrl down
+Clear All	ctrl delete
+Set All	ctrl insert
+TEST		ctrl z
+
+
+
+[section 4]
+Format for section
+Formula	- an equasion
+Use		- the function and uses of the formula
+Result	- effect on EFLAGS
+See It	- see it in action using cCalc
+		  each line represents a command to input
+		  Unless otherwise noted, consider:
+		  Input field as dest operand or accumulator (EAX)
+		  Op field as source operand
+
+Dual formulas
+	The formulas presented here may be reversed to get
+	the opposite results.  Reversing involves exchanging
+	the operands:
+	
+	x-1	<=>	x+1
+	-x	<=>	!(x+1)
+	&	<=>	|
+	x	<=> 	x
+	!x	<=> 	!x
+	
+	--------------------------------------------------
+	Formula: x & (x-1)
+	
+	Use: 	determine if unsigned x is power of 2
+		clear right-most set bit
+			
+	Result:	zero set = true
+		
+	See it:
+		Input		32
+		Op		31
+		AND		= zero set
+		
+		Input		31
+		Op		30
+		AND		= zero clear
+	
+	--------------------------------------------------
+	Formula: x & (x+1)
+	
+	Use:	determine if unsigned x is x^n-1
+	
+	Result: zero set = true
+	
+	See it:
+		Input		31
+		OP		32
+		AND		= zero set
+		
+		Input		32
+		Op		33
+		AND		= zero clear
+		
+	--------------------------------------------------
+	Formula: x & (-x)
+	
+	Use:	isolate the rightmost set bit
+			(find the smallest 1 bit)
+
+	Result: zero set = no set bits, x = 0
+	
+	See it:
+		Input		180
+		MOV -> Op
+		NEG
+		AND		= 4
+		
+	--------------------------------------------------
+	Formula -x & (x+1)
+	
+	Use:	isolate the rightmost 0 bit
+	
+	Result:	zero set = no set bits, x = 0
+	
+	See it:
+		Input		55
+		Op		56
+		NEG
+		AND		= 8
+		
+	--------------------------------------------------
+	Formula: 	a) !x & (x-1)
+			b) ! (x | -x)
+			c) (x & -x) -1
+			 
+	Use:	Create mask of trailing zeros
+		eg: 0100_1000  =>  0000_0111
+			
+	Result: zero set = x is 1
+				
+	See it:
+		a)	Input		1000
+			Op		999
+			NOT
+			AND		= 7
+			
+		b)	Input		1000
+			MOV -> Op
+			NEG
+			OR
+			NOT		= 7
+			
+		c)	Input		1000
+			MOV -> Op
+			AND
+			Op		1
+			SUB		= 7
+			
+	--------------------------------------------------
+	Formula: x ^| (x-1)
+	
+	Use:	Create a mask of rightmost set bit
+			and trailing zeros
+			
+	See it:
+		Input		168
+		Op		167
+		XOR		= 15
+		
+	--------------------------------------------------
+	Formula: x | (x-1)
+	
+	Use:	Right extend rightmost set bit
+	
+	See It:
+		Input		168
+		Op		167
+		OR		= 175
+		
+	--------------------------------------------------
+	Formula: ((x | (x-1)) +1) & x
+	
+	Use:	Isolate leftmost set bit
+			determine if unsigned x is in the form
+			2^j - 2^k where j => k => 0
+			
+	Result:	zero set = true
+	
+	See it:
+		Input		3
+		Op		2
+		OR
+		Op		1
+		ADD
+		Op		3
+		AND		= 0  zero set, true
+	
+	--------------------------------------------------
+	Formula:	a) (x ^| y) -y		y- (x ^| y)
+			b) (x + y) ^| y		(y - x) ^| y
+			c) (x- (2x &y)		x- (2x & y)
+			
+	Use:	calculate absolute value of x, where y = (x SAR 31)
+		For calculating not absolute, use the second form.
+		
+	See it: (only a shown)
+		Input		16
+		NEG
+		SAR		x31 (or stop when you reach -1)
+		MOV -> Op	(Op = y) 
+		Input		16
+		NEG
+		XOR
+		SUB		= 16
+		
+	--------------------------------------------------
+	Formula:	- ((x ^| (-n)) & (-n))
+			where n is even alignment
+	
+	Use:	find next x evenly divisible by n, n is even
+		alignment
+	
+	See it:
+		Input		8
+		NEG
+		MOV -> Op	= -n
+		Input		9
+		XOR
+		AND
+		NEG		= 16
+		
+	--------------------------------------------------
+	Formula:	x & (-n)
+			where n is even alignment
+		
+	Use:	find previous x evenly divisible by n, n is even
+		alignment
+		
+	See it:
+		Input		8
+		NEG
+		MOV -> Op	= -n
+		Input		9
+		AND		= 8
+		
+	
+	--------------------------------------------------
+	
+
+	
+	
+fin
